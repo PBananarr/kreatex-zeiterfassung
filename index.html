@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zeiterfassung – Offline</title>
+  <style>
+    :root{
+      --bg:#f0f2f5;                /* Background */
+      --primary:#3b5370;            /* Überschriften / Buttons */
+      --text-on-primary:#ffffff;    /* Text auf Primärflächen */
+      --accent:#f7faff;             /* Extra Akzent Farbe 1 */
+      --text:#2f3e52;               /* Fließtext (Lesbarkeit) */
+      --card:#ffffff;
+      --ok:#2e7d32; --warn:#c62828; --muted:#8aa0b9;
+      --radius:14px; --shadow: 0 8px 24px rgba(59,83,112,0.12);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans",sans-serif}
+    header{background:var(--primary);color:var(--text-on-primary);padding:20px 24px;position:sticky;top:0;z-index:10;box-shadow:var(--shadow)}
+    header h1{margin:0;font-size:22px;letter-spacing:.3px}
+    .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+    .grid{display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start}
+    @media (max-width:980px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+    .card .head{background:var(--primary);color:var(--text-on-primary);padding:14px 16px;font-weight:600}
+    .card .body{padding:16px}
+    label{display:block;font-size:13px;margin:10px 0 6px;color:var(--primary);font-weight:600}
+    input[type="text"], input[type="number"], input[type="time"], input[type="month"], select{
+      width:100%;padding:10px 12px;border:1px solid #d3dbe6;border-radius:10px;background:var(--accent);outline:none
+    }
+    input[type="time"]{padding:8px 10px}
+    .row{display:flex;gap:10px}
+    .row > *{flex:1}
+    .btn{display:inline-flex;align-items:center;gap:8px;border:0;padding:10px 14px;border-radius:12px;background:var(--primary);color:var(--text-on-primary);cursor:pointer}
+    .btn.secondary{background:#415c7c}
+    .btn.ghost{background:transparent;color:var(--primary);border:1px solid #c6d1de}
+    .btn.danger{background:#c62828;color:#fff}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+    .emp-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid #e1e8f0;border-radius:10px;background:#fff}
+    .emp-item .name{font-weight:600;color:#2f3e52}
+    .emp-item small{color:var(--muted)}
+    .emp-item button{padding:6px 10px;border-radius:8px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    thead th{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5a718f;text-align:left;padding:0 10px}
+    tbody tr{background:#fff}
+    tbody td{padding:8px 10px;border-top:1px solid #e6edf5;border-bottom:1px solid #e6edf5}
+    tbody tr td:first-child{border-left:1px solid #e6edf5;border-top-left-radius:10px;border-bottom-left-radius:10px}
+    tbody tr td:last-child{border-right:1px solid #e6edf5;border-top-right-radius:10px;border-bottom-right-radius:10px}
+    .badge{padding:4px 8px;border-radius:999px;font-size:12px}
+    .badge.ok{background:#e6f4ea;color:var(--ok)}
+    .badge.warn{background:#fdecea;color:var(--warn)}
+    .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+    .kpi .k{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:12px}
+    .k .t{font-size:12px;color:#5a718f}
+    .k .v{font-size:20px;font-weight:700;color:#2f3e52}
+    footer{margin:24px 0;text-align:center;color:#8aa0b9;font-size:12px}
+
+    /* Print styles: nur Stundennachweis-Seite */
+    @media print{
+      @page{ size:A4 portrait; margin:12mm; }
+      html,body{background:#fff;-webkit-print-color-adjust:exact; print-color-adjust:exact}
+      /* Nur den Print-Bereich ausgeben */
+      body *{ visibility:hidden !important }
+      #print-area, #print-area *{ visibility:visible !important }
+      #print-area{ position:absolute; left:0; top:0; width:100% }
+
+      .print-page{font-size:10pt;color:#000}
+      .print-head{margin-bottom:8px}
+      .print-head h2{margin:0 0 4px 0}
+      .print-meta{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 14px}
+      .print-table{width:100%;border-collapse:collapse;font-size:10pt}
+      .print-table th,.print-table td{border:1px solid #999;padding:3px 6px}
+      .sig{margin-top:10px}
+      .print-foot{margin-top:8px;font-size:10pt}
+    }
+
+    #print-area{display:none}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Zeiterfassung (offline, lokal gespeichert)</h1>
+  </header>
+
+  <div class="wrap">
+    <div class="grid">
+      <!-- Mitarbeiter-Verwaltung -->
+      <section class="card" id="empCard">
+        <div class="head">Mitarbeiter anlegen</div>
+        <div class="body">
+          <div class="row">
+            <div>
+              <label for="empVorname">Vorname</label>
+              <input id="empVorname" type="text" placeholder="z. B. Anna" />
+            </div>
+            <div>
+              <label for="empName">Nachname</label>
+              <input id="empName" type="text" placeholder="z. B. Müller" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="empPN">Personalnummer</label>
+              <input id="empPN" type="text" placeholder="z. B. 10023" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="btnAddEmp">Mitarbeiter anlegen</button>
+            <button class="btn ghost" id="btnClearEmp">Felder leeren</button>
+          </div>
+
+          <hr style="border:none;border-top:1px solid #e6edf5;margin:16px 0">
+
+          <label for="empFilter">Mitarbeiter suchen</label>
+          <input id="empFilter" type="text" placeholder="Name / Personalnummer" />
+          <div class="list" id="empList"></div>
+        </div>
+      </section>
+
+      <!-- Zeiterfassung / Monat -->
+      <section class="card">
+        <div class="head">Zeiterfassung</div>
+        <div class="body">
+
+          <div class="toolbar">
+            <div style="min-width:260px">
+              <label for="selEmployee">Mitarbeiter</label>
+              <select id="selEmployee"></select>
+            </div>
+            <div>
+              <label for="selMonth">Monat</label>
+              <input id="selMonth" type="month" />
+            </div>
+            <div class="no-print" style="align-self:end;display:flex;gap:8px">
+              <button class="btn" id="btnSave">Änderungen speichern</button>
+              <button class="btn secondary" id="btnPrint">PDF (aktueller Monat)</button>
+            </div>
+          </div>
+
+          <div class="kpi">
+            <div class="k"><div class="t">IST (Std., netto)</div><div class="v" id="kIst">0:00</div></div>
+            <div class="k"><div class="t">SOLL (Std.)</div><div class="v" id="kSoll">0:00</div></div>
+            <div class="k"><div class="t">Noch zu leisten</div><div class="v" id="kRest">0:00</div></div>
+            <div class="k"><div class="t">Überstunden</div><div class="v" id="kUeber">0:00</div></div>
+          </div>
+
+          <div class="card controls no-print" style="background:var(--accent);border-radius:12px;padding:12px;border:1px solid #d3dbe6;margin-bottom:12px">
+            <strong style="color:var(--primary)">Hinweis:</strong> Arbeitszeitmodell 40 Std./Woche (SOLL = 8 Std. pro Werktag Mo–Fr).<br>
+            <strong>Pausen (ArbZG):</strong> ≤ 6 Std. keine Pflicht, &gt; 6–9 Std. min. 30 Min., &gt; 9 Std. min. 45 Min. – wird automatisch auf die Netto‑Arbeitszeit angerechnet (Spalte <em>Pause (min)</em> ist überschreibbar).
+          </div>
+
+          <div style="overflow:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:130px">Datum</th>
+                  <th style="width:90px">Wochentag</th>
+                  <th style="width:130px">Kommen</th>
+                  <th style="width:130px">Gehen</th>
+                  <th style="width:110px">Pause (min)</th>
+                  <th style="width:140px">Stunden (netto)</th>
+                  <th>Notiz</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </section>
+    </div>
+
+    <footer class="no-print">Lokale Speicherung via IndexedDB. Läuft vollständig offline im Browser.</footer>
+  </div>
+
+  <!-- Print Area (nur 1 Seite, aktueller Monat) -->
+  <div id="print-area">
+    <div class="print-page" id="printPage"></div>
+  </div>
+
+  <script>
+    // ===== IndexedDB Helper =====
+    const DB_NAME = 'zeiterfassung-v1';
+    const DB_VERSION = 1; // Schema bleibt kompatibel (optionale Felder)
+    let db;
+
+    function openDB(){
+      return new Promise((resolve, reject)=>{
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = ()=>{
+          const db = req.result;
+          if(!db.objectStoreNames.contains('employees')){
+            const s = db.createObjectStore('employees', { keyPath: 'id', autoIncrement: true });
+            s.createIndex('by_lastname','lastName',{unique:false});
+            s.createIndex('by_personal','personalNumber',{unique:false});
+          }
+          if(!db.objectStoreNames.contains('entries')){
+            const s = db.createObjectStore('entries', { keyPath: 'id' });
+            s.createIndex('by_employee','employeeId',{unique:false});
+            s.createIndex('by_employee_date','employeeDate',{unique:false});
+          }
+        };
+        req.onsuccess = ()=> resolve(req.result);
+        req.onerror = ()=> reject(req.error);
+      });
+    }
+    function tx(storeNames, mode='readonly'){ return db.transaction(storeNames, mode); }
+
+    // Employees
+    async function addEmployee(firstName,lastName,personalNumber){
+      const t = tx(['employees'],'readwrite');
+      const data = { firstName, lastName, personalNumber, createdAt: new Date().toISOString() };
+      return await new Promise((res, rej)=>{
+        const req = t.objectStore('employees').add(data);
+        req.onsuccess = ()=> res(req.result);
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+    async function listEmployees(){
+      const t = tx(['employees']);
+      const s = t.objectStore('employees');
+      const idx = s.index('by_lastname');
+      return await new Promise((res, rej)=>{
+        const out=[]; const req = idx.openCursor();
+        req.onsuccess = ()=>{ const cur = req.result; if(cur){ out.push({id:cur.primaryKey, ...cur.value}); cur.continue(); } else { res(out); } };
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+    async function getEmployee(id){
+      const t = tx(['employees']);
+      return await new Promise((res, rej)=>{
+        const req = t.objectStore('employees').get(Number(id));
+        req.onsuccess = ()=> res(req.result);
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+    async function deleteEmployee(id){
+      const t = tx(['employees'],'readwrite');
+      await new Promise((res, rej)=>{ const req = t.objectStore('employees').delete(Number(id)); req.onsuccess = ()=>res(true); req.onerror = ()=>rej(req.error); });
+      // zugehörige Einträge löschen
+      const t2 = tx(['entries'],'readwrite');
+      const s2 = t2.objectStore('entries').index('by_employee');
+      await new Promise((res, rej)=>{
+        const req = s2.openCursor(IDBKeyRange.only(Number(id)));
+        req.onsuccess = ()=>{ const cur = req.result; if(cur){ t2.objectStore('entries').delete(cur.primaryKey); cur.continue(); } else { res(true); } };
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+    async function onDeleteEmployee(id){
+      const emp = await getEmployee(id);
+      if(!confirm(`Mitarbeiter ${emp?.firstName||''} ${emp?.lastName||''} (PN: ${emp?.personalNumber||'-'}) wirklich löschen? Alle Zeit-Einträge gehen verloren.`)) return;
+      await deleteEmployee(id);
+      await refreshEmployees();
+      if(String(currentEmployeeId)===String(id)){
+        currentEmployeeId = null;
+        await renderMonth();
+      }
+    }
+
+    // Entries
+    function entryId(employeeId, dateISO){ return `${employeeId}_${dateISO}`; }
+    async function saveEntry({employeeId, dateISO, start, end, pauseMin, note}){
+      const hours = computeNetHours(start,end,pauseMin);
+      const id = entryId(employeeId,dateISO);
+      const employeeDate = `${employeeId}_${dateISO}`;
+      const t = tx(['entries'],'readwrite');
+      return await new Promise((res, rej)=>{
+        const obj = { id, employeeId:Number(employeeId), date: dateISO, start:start||'', end:end||'', pauseMin: Number(pauseMin)||0, note:note||'', hours };
+        const req = t.objectStore('entries').put(obj);
+        req.onsuccess = ()=> res(obj);
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+    async function deleteEntry(employeeId, dateISO){
+      const id = entryId(employeeId,dateISO);
+      const t = tx(['entries'],'readwrite');
+      return await new Promise((res, rej)=>{
+        const req = t.objectStore('entries').delete(id);
+        req.onsuccess = ()=> res(true);
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+    async function getEntriesForEmployeeMonth(employeeId, year, month){
+      const t = tx(['entries']);
+      const s = t.objectStore('entries').index('by_employee');
+      return await new Promise((res, rej)=>{
+        const req = s.openCursor(IDBKeyRange.only(Number(employeeId)));
+        const prefix = `${year}-${String(month).padStart(2,'0')}-`;
+        const out = new Map();
+        req.onsuccess = ()=>{ const cur = req.result; if(cur){ const v = cur.value; if(v.date.startsWith(prefix)) out.set(v.date, v); cur.continue(); } else { res(out); } };
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+
+    // ===== Utilities =====
+    function toISODate(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+    function toDE(dateISO){ const [y,m,d] = dateISO.split('-'); return `${d}.${m}.${y}`; }
+    function germanWeekdayFromISO(dateISO){ const d = new Date(dateISO); const days = ['So','Mo','Di','Mi','Do','Fr','Sa']; return days[d.getDay()]; }
+    function rawMinutes(start,end){ if(!start || !end) return 0; const [sh,sm] = start.split(':').map(Number); const [eh,em] = end.split(':').map(Number); return (eh*60+em) - (sh*60+sm); }
+    function defaultBreakMin(totalMin){ if(totalMin > 9*60) return 45; if(totalMin > 6*60) return 30; return 0; }
+    function computeNetHours(start,end,pauseMin){ const total = rawMinutes(start,end); if(total <= 0) return 0; const p = Math.max(0, Number.isFinite(pauseMin)? Number(pauseMin):0); const net = Math.max(0, total - p); return Math.round((net/60)*100)/100; }
+    const sum = arr => arr.reduce((a,b)=>a+b,0);
+    function hm(hours){ const total = Math.round(hours*60); const h = Math.floor(total/60); const m = total % 60; return `${h}:${String(m).padStart(2,'0')}`; }
+    function workingDaysInMonth(year, month){
+      const d = new Date(year, month-1, 1);
+      let count = 0;
+      while(d.getMonth() === month-1){
+        const day = d.getDay(); // 0 So ... 6 Sa
+        if(day >= 1 && day <= 5) count++;
+        d.setDate(d.getDate()+1);
+      }
+      return count;
+    }
+
+    // ===== UI =====
+    const empVorname = document.getElementById('empVorname');
+    const empName = document.getElementById('empName');
+    const empPN = document.getElementById('empPN');
+    const btnAddEmp = document.getElementById('btnAddEmp');
+    const btnClearEmp = document.getElementById('btnClearEmp');
+    const empFilter = document.getElementById('empFilter');
+    const empList = document.getElementById('empList');
+    const selEmployee = document.getElementById('selEmployee');
+    const selMonth = document.getElementById('selMonth');
+    const tbody = document.getElementById('tbody');
+    const kIst = document.getElementById('kIst');
+    const kSoll = document.getElementById('kSoll');
+    const kRest = document.getElementById('kRest');
+    const kUeber = document.getElementById('kUeber');
+    const btnSave = document.getElementById('btnSave');
+    const btnPrint = document.getElementById('btnPrint');
+    let currentEmployeeId = null;
+
+    async function refreshEmployees(selectKeep=false){
+      const list = await listEmployees();
+      const f = empFilter.value.trim().toLowerCase();
+      empList.innerHTML = '';
+      list.filter(e=>`${e.firstName} ${e.lastName} ${e.personalNumber}`.toLowerCase().includes(f)).forEach(e=>{
+        const div = document.createElement('div'); div.className = 'emp-item';
+        const left = document.createElement('div');
+        left.innerHTML = `<div class="name">${e.firstName} ${e.lastName}</div><small>PN: ${e.personalNumber||'-'}</small>`;
+        const right = document.createElement('div');
+        const btn = document.createElement('button'); btn.className = 'btn ghost'; btn.textContent = 'Auswählen';
+        btn.onclick = ()=>{ selEmployee.value = e.id; selEmployee.dispatchEvent(new Event('change')); window.scrollTo({top:0,behavior:'smooth'}); };
+        right.appendChild(btn);
+        const del = document.createElement('button'); del.className='btn danger'; del.style.marginLeft='6px'; del.textContent='Löschen'; del.title='Mitarbeiter & Einträge löschen';
+        del.onclick = async ()=>{ await onDeleteEmployee(e.id); };
+        right.appendChild(del);
+        div.appendChild(left); div.appendChild(right); empList.appendChild(div);
+      });
+      const prev = selEmployee.value; selEmployee.innerHTML = '';
+      list.forEach(e=>{ const opt = document.createElement('option'); opt.value = e.id; opt.textContent = `${e.lastName}, ${e.firstName} (PN: ${e.personalNumber||'-'})`; selEmployee.appendChild(opt); });
+      if(list.length){ selEmployee.value = selectKeep && prev ? prev : list[0].id; currentEmployeeId = selEmployee.value; }
+      else { selEmployee.innerHTML = '<option value="">— keine Mitarbeiter —</option>'; currentEmployeeId = null; }
+    }
+
+    function setDefaultMonth(){ const now = new Date(); selMonth.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`; }
+    function parseMonth(){ if(!selMonth.value){ const n=new Date(); return {year:n.getFullYear(), month:n.getMonth()+1}; } const [y,m] = selMonth.value.split('-').map(Number); return {year:y, month:m}; }
+
+    function makeRow(dateISO, entry){
+      const tr = document.createElement('tr');
+      const wd = germanWeekdayFromISO(dateISO);
+      const isWorkday = ['Mo','Di','Mi','Do','Fr'].includes(wd);
+      const startVal = entry?.start || '';
+      const endVal = entry?.end || '';
+      const totalMin = rawMinutes(startVal, endVal);
+      const pauseDefault = entry?.pauseMin ?? defaultBreakMin(totalMin);
+      const hoursNet = computeNetHours(startVal, endVal, pauseDefault);
+
+      tr.setAttribute('data-iso', dateISO);
+      tr.innerHTML = `
+        <td>${toDE(dateISO)}</td>
+        <td><span class="badge ${isWorkday? 'ok':'warn'}">${wd}</span></td>
+        <td><input type="time" step="60" value="${startVal}"></td>
+        <td><input type="time" step="60" value="${endVal}"></td>
+        <td><input type="number" min="0" step="5" value="${pauseDefault}" title="Pause in Minuten"></td>
+        <td class="hours" style="font-weight:700" title="${hoursNet.toFixed(2)} Std">${hm(hoursNet)}</td>
+        <td><input type="text" placeholder="Optional" value="${entry?.note?entry.note.replace(/\"/g,'&quot;'):''}"></td>
+      `;
+
+      const iStart = tr.children[2].firstElementChild;
+      const iEnd = tr.children[3].firstElementChild;
+      const iPause = tr.children[4].firstElementChild;
+      const iHours = tr.children[5];
+
+      iPause.addEventListener('input', ()=>{ const h = computeNetHours(iStart.value, iEnd.value, Number(iPause.value||0)); iHours.textContent = hm(h); iHours.title = `${h.toFixed(2)} Std`; refreshKPIs(); iPause.dataset.manual = '1'; });
+      function recalc(){
+        const total = rawMinutes(iStart.value, iEnd.value);
+        if(iPause.dataset.manual !== '1'){ iPause.value = String(defaultBreakMin(total)); }
+        const h = computeNetHours(iStart.value, iEnd.value, Number(iPause.value||0));
+        iHours.textContent = hm(h); iHours.title = `${h.toFixed(2)} Std`;
+        refreshKPIs();
+      }
+      iStart.addEventListener('change', recalc);
+      iEnd.addEventListener('change', recalc);
+      return tr;
+    }
+
+    async function renderMonth(){
+      tbody.innerHTML = '';
+      if(!currentEmployeeId) return;
+      const {year, month} = parseMonth();
+      const entries = await getEntriesForEmployeeMonth(currentEmployeeId, year, month);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      for(let d=1; d<=daysInMonth; d++){
+        const iso = toISODate(year, month, d);
+        const entry = entries.get(iso);
+        tbody.appendChild(makeRow(iso, entry));
+      }
+      refreshKPIs();
+    }
+
+    function getTableData(){
+      return [...tbody.querySelectorAll('tr')].map(tr=>{
+        const dateISO = tr.getAttribute('data-iso');
+        const start = tr.children[2].firstElementChild.value || '';
+        const end = tr.children[3].firstElementChild.value || '';
+        const pauseMin = Number(tr.children[4].firstElementChild.value||0);
+        const note = tr.children[6].firstElementChild.value || '';
+        const hours = computeNetHours(start,end,pauseMin);
+        return {dateISO, start, end, pauseMin, note, hours};
+      });
+    }
+
+    function refreshKPIs(){
+      const rows = getTableData();
+      const ist = sum(rows.map(r=>r.hours));
+      const {year, month} = parseMonth();
+      const soll = workingDaysInMonth(year, month) * 8;
+      const rest = Math.max(0, soll - ist);
+      const ueber = Math.max(0, ist - soll);
+      kIst.textContent = hm(ist);
+      kSoll.textContent = hm(soll);
+      kRest.textContent = hm(rest);
+      kUeber.textContent = hm(ueber);
+    }
+
+    async function saveAll(){
+      if(!currentEmployeeId) return;
+      const rows = getTableData();
+      for(const r of rows){
+        if(r.start && r.end){ await saveEntry({employeeId: currentEmployeeId, dateISO: r.dateISO, start: r.start, end: r.end, pauseMin: r.pauseMin, note: r.note}); }
+        else { await deleteEntry(currentEmployeeId, r.dateISO); }
+      }
+      await renderMonth();
+      alert('Gespeichert.');
+    }
+
+    async function printMonth(){
+      if(!currentEmployeeId) return;
+      const emp = await getEmployee(currentEmployeeId);
+      const {year, month} = parseMonth();
+      const monthStr = new Date(year, month-1, 1).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
+      const rows = getTableData();
+      const ist = sum(rows.map(r=>r.hours));
+      const soll = workingDaysInMonth(year, month) * 8;
+      const rest = Math.max(0, soll - ist);
+      const ueber = Math.max(0, ist - soll);
+
+      const tableRows = rows.map(r=>`<tr><td>${toDE(r.dateISO)}</td><td>${germanWeekdayFromISO(r.dateISO)}</td><td>${r.start||'-'}</td><td>${r.end||'-'}</td><td style="text-align:right">${hm(r.hours)}</td></tr>`).join('');
+
+      const html = `
+        <div class="print-head">
+          <h2>Stundennachweis – ${monthStr}</h2>
+          <div class="print-meta">
+            <div><strong>Vorname:</strong> ${emp?.firstName||''}</div>
+            <div><strong>Nachname:</strong> ${emp?.lastName||''}</div>
+            <div><strong>Personalnummer:</strong> ${emp?.personalNumber||''}</div>
+            <div><strong>Erstellt am:</strong> ${new Date().toLocaleDateString('de-DE')}</div>
+          </div>
+        </div>
+        <table class="print-table" style="page-break-inside:avoid">
+          <thead><tr><th>Datum</th><th>Wochentag</th><th>Kommen</th><th>Gehen</th><th>Stunden (netto)</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+        <div class="print-foot">
+          <strong>IST:</strong> ${hm(ist)} Std. &nbsp; | &nbsp;
+          <strong>SOLL:</strong> ${hm(soll)} Std. &nbsp; | &nbsp;
+          <strong>Noch zu leisten:</strong> ${hm(rest)} Std. &nbsp; | &nbsp;
+          <strong>Überstunden:</strong> ${hm(ueber)} Std.
+        </div>
+        <div class="sig">
+          <div>Unterschrift Mitarbeiter: ____________________________ &nbsp;&nbsp; Datum: ____________</div>
+        </div>
+      `;
+      document.getElementById('printPage').innerHTML = html;
+      window.print();
+    }
+
+    // ===== Event wiring & init =====
+    btnAddEmp.addEventListener('click', async ()=>{
+      const fn = empVorname.value.trim();
+      const ln = empName.value.trim();
+      if(!fn || !ln){ alert('Bitte Vor- und Nachname angeben.'); return; }
+      await addEmployee(fn, ln, empPN.value.trim());
+      empVorname.value = empName.value = empPN.value = '';
+      await refreshEmployees();
+    });
+    btnClearEmp.addEventListener('click', ()=>{ empVorname.value = empName.value = empPN.value = ''; empVorname.focus(); });
+    empFilter.addEventListener('input', ()=> refreshEmployees(true));
+    selEmployee.addEventListener('change', async ()=>{ currentEmployeeId = selEmployee.value; await renderMonth(); });
+    selMonth.addEventListener('change', renderMonth);
+    btnSave.addEventListener('click', saveAll);
+    btnPrint.addEventListener('click', printMonth);
+
+    (async function init(){
+      db = await openDB();
+      await refreshEmployees();
+      setDefaultMonth();
+      await renderMonth();
+    })();
+  </script>
+</body>
+</html>
